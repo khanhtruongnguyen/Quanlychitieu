@@ -4,10 +4,19 @@
 class ExpenseStore {
   constructor() {
     this.STORAGE_KEY = 'qlct_student_storage_v2';
+    this.SECURE_AUTH_KEY = 'qlct_github_credentials'; // Lưu riêng Token & GistID ở máy cá nhân
+
     this.syncStatus = 'local';
     this.syncMessage = 'Lưu cục bộ';
     this.subscribers = [];
     this.syncDebounceTimer = null;
+
+    // Cấu hình kết nối GitHub Gist (CHỈ LƯU TRÊN TRÌNH DUYỆT CÁ NHÂN, KHÔNG ĐẨY LÊN GIST)
+    this.authConfig = {
+      githubToken: '',
+      gistId: '',
+      lastSync: null
+    };
 
     this.data = this.getDefaultData();
     this.loadFromLocal();
@@ -15,11 +24,6 @@ class ExpenseStore {
 
   getDefaultData() {
     return {
-      settings: {
-        githubToken: '',
-        gistId: '',
-        lastSync: null
-      },
       // Các khoản / hũ tiết kiệm
       savings: [
         {
@@ -42,7 +46,7 @@ class ExpenseStore {
         {
           id: 'tx_init_1',
           amount: 2000000,
-          type: 'income', // 'income' (nhận tiền) hoặc 'expense' (chi)
+          type: 'income',
           wallet: 'qr',
           category: 'allowance',
           note: 'Bố mẹ gửi đầu tháng',
@@ -89,12 +93,22 @@ class ExpenseStore {
   }
 
   loadFromLocal() {
+    // 1. Đọc thông tin xác thực GitHub từ khoá riêng
+    try {
+      const authSaved = localStorage.getItem(this.SECURE_AUTH_KEY);
+      if (authSaved) {
+        this.authConfig = { ...this.authConfig, ...JSON.parse(authSaved) };
+      }
+    } catch (e) {
+      console.error('Không thể đọc thông tin xác thực', e);
+    }
+
+    // 2. Đọc dữ liệu chi tiêu & tiết kiệm
     try {
       const saved = localStorage.getItem(this.STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         this.data = {
-          settings: { ...this.data.settings, ...(parsed.settings || {}) },
           savings: Array.isArray(parsed.savings) ? parsed.savings : this.data.savings,
           transactions: Array.isArray(parsed.transactions) ? parsed.transactions : []
         };
@@ -107,16 +121,40 @@ class ExpenseStore {
   saveToLocal() {
     try {
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.data));
+      localStorage.setItem(this.SECURE_AUTH_KEY, JSON.stringify(this.authConfig));
     } catch (e) {
       console.error('Không thể lưu vào localStorage', e);
     }
   }
 
+  setGitHubConfig(token, gistId) {
+    this.authConfig.githubToken = (token || '').trim();
+    if (gistId) this.authConfig.gistId = gistId.trim();
+    this.saveToLocal();
+  }
+
+  getGitHubConfig() {
+    return this.authConfig;
+  }
+
+  /**
+   * Đóng gói dữ liệu gửi lên Gist: CHỈ gửi danh sách chi tiêu và tiết kiệm.
+   * TUYỆT ĐỐI KHÔNG chứa Token hay GistID trong payload!
+   */
+  getGistPayload() {
+    return {
+      version: 2,
+      lastUpdated: new Date().toISOString(),
+      savings: this.data.savings,
+      transactions: this.data.transactions
+    };
+  }
+
   queueGistSync() {
-    const { githubToken, gistId } = this.data.settings;
+    const { githubToken, gistId } = this.authConfig;
     if (!githubToken || !gistId) {
       this.syncStatus = 'local';
-      this.syncMessage = 'Chưa liên kết Gist';
+      this.syncMessage = 'Lưu cục bộ';
       this.notify();
       return;
     }
@@ -129,8 +167,9 @@ class ExpenseStore {
 
     this.syncDebounceTimer = setTimeout(async () => {
       try {
-        await GistService.updateGist(githubToken, gistId, this.data);
-        this.data.settings.lastSync = new Date().toISOString();
+        const payload = this.getGistPayload();
+        await GistService.updateGist(githubToken, gistId, payload);
+        this.authConfig.lastSync = new Date().toISOString();
         this.saveToLocal();
         this.syncStatus = 'synced';
         this.syncMessage = 'Đã lưu GitHub';
@@ -144,7 +183,7 @@ class ExpenseStore {
   }
 
   async pullFromGist() {
-    const { githubToken, gistId } = this.data.settings;
+    const { githubToken, gistId } = this.authConfig;
     if (!githubToken || !gistId) throw new Error('Chưa cấu hình Token hoặc Gist ID');
 
     this.syncStatus = 'syncing';
@@ -155,11 +194,10 @@ class ExpenseStore {
       const remoteData = await GistService.fetchGist(githubToken, gistId);
       if (remoteData) {
         this.data = {
-          settings: { ...this.data.settings, ...(remoteData.settings || {}) },
           savings: Array.isArray(remoteData.savings) ? remoteData.savings : this.data.savings,
           transactions: Array.isArray(remoteData.transactions) ? remoteData.transactions : []
         };
-        this.data.settings.lastSync = new Date().toISOString();
+        this.authConfig.lastSync = new Date().toISOString();
         this.saveToLocal();
         this.syncStatus = 'synced';
         this.syncMessage = 'Đã cập nhật từ Gist';
@@ -178,10 +216,12 @@ class ExpenseStore {
     this.syncMessage = 'Đang tạo Gist mới...';
     this.notify();
 
-    const gistId = await GistService.createGist(token, this.data);
-    this.data.settings.githubToken = token;
-    this.data.settings.gistId = gistId;
-    this.data.settings.lastSync = new Date().toISOString();
+    const payload = this.getGistPayload();
+    const gistId = await GistService.createGist(token, payload);
+
+    this.authConfig.githubToken = token;
+    this.authConfig.gistId = gistId;
+    this.authConfig.lastSync = new Date().toISOString();
     this.saveToLocal();
 
     this.syncStatus = 'synced';
@@ -190,9 +230,6 @@ class ExpenseStore {
     return gistId;
   }
 
-  /**
-   * Thêm giao dịch: Chi tiêu (-) hoặc Nhận tiền (+)
-   */
   addTransaction({ amount, wallet, category, note, type = 'expense' }) {
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
@@ -201,8 +238,8 @@ class ExpenseStore {
     const newTx = {
       id: 'tx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
       amount: Number(amount),
-      type, // 'expense' | 'income' | 'saving_deposit' | 'saving_withdraw'
-      wallet, // 'qr' | 'cash'
+      type,
+      wallet,
       category,
       note: (note || '').trim(),
       date: dateStr,
@@ -221,7 +258,6 @@ class ExpenseStore {
     const tx = this.data.transactions.find(t => t.id === id);
     if (!tx) return;
 
-    // Nếu xóa giao dịch nạp/rút tiết kiệm thì hoàn lại tiền trong hũ
     if (tx.type === 'saving_deposit' && tx.savingGoalId) {
       const goal = this.data.savings.find(g => g.id === tx.savingGoalId);
       if (goal) goal.currentAmount = Math.max(0, goal.currentAmount - tx.amount);
@@ -236,11 +272,6 @@ class ExpenseStore {
     this.notify();
   }
 
-  // ================= Quản lý Tiết Kiệm (Savings) =================
-
-  /**
-   * Tạo một hũ tiết kiệm mới
-   */
   createSavingsGoal({ name, icon = '🐷', targetAmount = 0 }) {
     const newGoal = {
       id: 'save_' + Date.now(),
@@ -256,9 +287,6 @@ class ExpenseStore {
     return newGoal;
   }
 
-  /**
-   * Bỏ tiền vào hũ tiết kiệm (trích từ ví QR hoặc Tiền mặt)
-   */
   depositToSavings(goalId, amount, wallet = 'qr') {
     const goal = this.data.savings.find(g => g.id === goalId);
     if (!goal) throw new Error('Không tìm thấy hũ tiết kiệm');
@@ -268,7 +296,6 @@ class ExpenseStore {
 
     goal.currentAmount += numAmount;
 
-    // Ghi nhận giao dịch bỏ heo (giảm tiền ví)
     const now = new Date();
     this.data.transactions.unshift({
       id: 'tx_save_dep_' + Date.now(),
@@ -288,9 +315,6 @@ class ExpenseStore {
     this.notify();
   }
 
-  /**
-   * Rút tiền từ hũ tiết kiệm về lại ví
-   */
   withdrawFromSavings(goalId, amount, wallet = 'qr') {
     const goal = this.data.savings.find(g => g.id === goalId);
     if (!goal) throw new Error('Không tìm thấy hũ tiết kiệm');
@@ -301,7 +325,6 @@ class ExpenseStore {
 
     goal.currentAmount -= numAmount;
 
-    // Ghi nhận giao dịch rút heo (tăng lại tiền ví)
     const now = new Date();
     this.data.transactions.unshift({
       id: 'tx_save_wd_' + Date.now(),
@@ -328,16 +351,6 @@ class ExpenseStore {
     this.notify();
   }
 
-  updateSettings(newSettings) {
-    this.data.settings = { ...this.data.settings, ...newSettings };
-    this.saveToLocal();
-    this.queueGistSync();
-    this.notify();
-  }
-
-  /**
-   * Tính toán toàn bộ số dư thực tế theo từng ví và tiền tiết kiệm
-   */
   getFinancialSummary() {
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
@@ -352,7 +365,6 @@ class ExpenseStore {
     let totalIncomeThisMonth = 0;
 
     this.data.transactions.forEach(t => {
-      // 1. Nhận tiền (+)
       if (t.type === 'income') {
         if (t.wallet === 'qr') balanceQR += t.amount;
         else balanceCash += t.amount;
@@ -360,9 +372,7 @@ class ExpenseStore {
         if (t.date.startsWith(currentMonthPrefix)) {
           totalIncomeThisMonth += t.amount;
         }
-      }
-      // 2. Chi tiêu (-)
-      else if (t.type === 'expense') {
+      } else if (t.type === 'expense') {
         if (t.wallet === 'qr') balanceQR -= t.amount;
         else balanceCash -= t.amount;
 
@@ -375,22 +385,17 @@ class ExpenseStore {
           if (t.wallet === 'qr') spentTodayQR += t.amount;
           else spentTodayCash += t.amount;
         }
-      }
-      // 3. Nạp vào tiết kiệm (-) làm giảm tiền ví khả dụng
-      else if (t.type === 'saving_deposit') {
+      } else if (t.type === 'saving_deposit') {
         if (t.wallet === 'qr') balanceQR -= t.amount;
         else balanceCash -= t.amount;
-      }
-      // 4. Rút từ tiết kiệm (+) hoàn tiền về ví khả dụng
-      else if (t.type === 'saving_withdraw') {
+      } else if (t.type === 'saving_withdraw') {
         if (t.wallet === 'qr') balanceQR += t.amount;
         else balanceCash += t.amount;
       }
     });
 
-    // Tổng tiền tiết kiệm từ tất cả các hũ
     const totalSavings = this.data.savings.reduce((sum, g) => sum + (g.currentAmount || 0), 0);
-    const totalSpendable = balanceQR + balanceCash; // Tổng tiền khả dụng trong tay để tiêu
+    const totalSpendable = balanceQR + balanceCash;
 
     return {
       todayStr,
@@ -398,7 +403,7 @@ class ExpenseStore {
       balanceCash,
       totalSpendable,
       totalSavings,
-      totalNetWorth: totalSpendable + totalSavings, // Tổng tài sản của sinh viên
+      totalNetWorth: totalSpendable + totalSavings,
       spentToday,
       spentTodayQR,
       spentTodayCash,

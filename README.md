@@ -51,3 +51,6 @@
    - **Select scopes:** Tích chọn đúng 1 ô duy nhất là `[x] gist`.
 7. Bấm **Generate token** và sao chép mã (bắt đầu bằng `ghp_...`).
 8. Mở app QLCT -> Vào tab **⚙️ Gist** -> Dán Token vào rồi bấm **✨ Tạo Gist Mới**!
+
+> 🔒 **Về bảo mật Token:**
+> App lưu Token vào bộ nhớ cục bộ của trình duyệt (`localStorage`) trên thiết bị của bạn. Khi đồng bộ lên Gist, app chỉ gửi danh sách chi tiêu và tiết kiệm, **tuyệt đối không tải Token lên Gist**. Nhờ vậy Token của bạn sẽ an toàn và không bị robot bảo mật của GitHub (Secret Scanning) quét trúng và tự động thu hồi nữa.

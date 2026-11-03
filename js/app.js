@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   store.subscribe(renderAll);
 
-  if (store.data.settings.githubToken && store.data.settings.gistId) {
+  if (store.authConfig.githubToken && store.authConfig.gistId) {
     store.pullFromGist().catch(err => {
       console.warn('Lần đầu khởi động, không tải được Gist:', err.message);
     });
@@ -578,7 +578,7 @@ function setupSettingsAndGist() {
       return;
     }
 
-    store.updateSettings({ githubToken: token, gistId });
+    store.setGitHubConfig(token, gistId);
 
     try {
       showToast('Đang tải từ Gist...');
@@ -599,8 +599,9 @@ function setupSettingsAndGist() {
 }
 
 function renderSettingsValues() {
-  document.getElementById('input-github-token').value = store.data.settings.githubToken || '';
-  document.getElementById('input-gist-id').value = store.data.settings.gistId || '';
+  const auth = store.getGitHubConfig();
+  document.getElementById('input-github-token').value = auth.githubToken || '';
+  document.getElementById('input-gist-id').value = auth.gistId || '';
 }
 
 function escapeHtml(str) {
