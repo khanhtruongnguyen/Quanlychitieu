@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>QLCT Sinh Viên - Quản Lý Chi Tiêu & Tiết Kiệm</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="user-greeting">
+        <div class="avatar-badge">🎓</div>
+        <div class="greeting-text">
+          <h2>Ví Sinh Viên</h2>
+          <p>Kỷ luật tài chính & Tiết kiệm</p>
+        </div>
+      </div>
+      <div id="sync-pill" class="sync-pill" title="Chạm để xem cài đặt đồng bộ">
+        <span class="sync-dot"></span>
+        <span id="sync-text">Lưu cục bộ</span>
+      </div>
+    </header>
+
+    <!-- ================= TAB 1: TRANG CHỦ (HÔM NAY & NHẬP NHANH) ================= -->
+    <main id="tab-home" class="tab-content tab-page">
+      <!-- Thẻ Số Dư Khả Dụng Để Tiêu (Hero Card) -->
+      <section class="hero-budget-card">
+        <div class="hero-header">
+          <span class="hero-title">Số dư có thể tiêu</span>
+          <span class="status-tag safe">🟢 Khả dụng</span>
+        </div>
+        <div id="home-spendable-amount" class="daily-amount">
+          0 <span class="currency">₫</span>
+        </div>
+        <div class="budget-stats-row">
+          <div class="stat-item">
+            <span class="label">Đã tiêu hôm nay</span>
+            <span id="spent-today-val" class="value" style="color: #f87171;">0 ₫</span>
+          </div>
+          <div class="stat-item">
+            <span class="label">Đang trong heo đất</span>
+            <span id="home-saved-val" class="value" style="color: #f472b6;">0 ₫</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Hai nguồn tiền: QR vs Tiền mặt -->
+      <section class="wallets-overview">
+        <div class="wallet-badge qr">
+          <div class="wallet-badge-header">
+            <span>📱 Số dư QR / Bank</span>
+          </div>
+          <div id="wallet-qr-balance" class="wallet-badge-amount" style="color: #38bdf8;">0 ₫</div>
+        </div>
+        <div class="wallet-badge cash">
+          <div class="wallet-badge-header">
+            <span>💵 Tiền mặt trong ví</span>
+          </div>
+          <div id="wallet-cash-balance" class="wallet-badge-amount" style="color: #34d399;">0 ₫</div>
+        </div>
+      </section>
+
+      <!-- Hộp Ghi Chép Nhanh (Chi tiêu hoặc Nhận tiền) -->
+      <section class="quick-entry-card">
+        <!-- Chuyển đổi giữa [Chi Tiêu (-)] và [Nhận Tiền (+)] -->
+        <div class="tx-type-selector">
+          <button type="button" class="type-btn active" data-type="expense">
+            <span>💸 Chi tiêu (-)</span>
+          </button>
+          <button type="button" class="type-btn" data-type="income">
+            <span>💰 Nhận tiền (+)</span>
+          </button>
+        </div>
+
+        <!-- Chọn Nguồn Tiền: QR hay Tiền Mặt -->
+        <div class="wallet-selector">
+          <button type="button" class="wallet-btn active" data-wallet="qr">
+            <span>📱 Quét QR / Bank</span>
+          </button>
+          <button type="button" class="wallet-btn" data-wallet="cash">
+            <span>💵 Tiền mặt</span>
+          </button>
+        </div>
+
+        <!-- Nhập số tiền -->
+        <div class="amount-input-wrapper">
+          <input 
+            type="number" 
+            id="amount-input" 
+            class="amount-input-box" 
+            placeholder="0 (gõ 25 = 25k)" 
+            inputmode="numeric" 
+            autocomplete="off"
+          >
+          <span class="amount-unit">VNĐ</span>
+        </div>
+
+        <!-- Gợi ý số tiền nhanh -->
+        <div id="quick-chips" class="quick-chips"></div>
+
+        <!-- Lưới Danh mục 1-chạm -->
+        <div id="category-grid" class="category-grid"></div>
+
+        <!-- Ghi chú thêm (Tùy chọn) -->
+        <input 
+          type="text" 
+          id="note-input" 
+          class="note-input" 
+          placeholder="Ghi chú (bún bò, bố mẹ gửi, làm thêm...)..." 
+          maxlength="50"
+        >
+
+        <!-- Nút Gửi Giao Dịch -->
+        <button type="button" id="btn-submit-tx" class="btn-submit-tx expense-mode">
+          <span>-</span> Ghi Khoản Chi
+        </button>
+      </section>
+
+      <!-- Danh sách giao dịch gần đây -->
+      <section class="history-section">
+        <div class="section-title">
+          <span>Giao dịch gần đây</span>
+        </div>
+        <div id="recent-tx-list" class="tx-list"></div>
+      </section>
+    </main>
+
+    <!-- ================= TAB 2: TIẾT KIỆM (SAVINGS / HEO ĐẤT) ================= -->
+    <main id="tab-savings" class="tab-content tab-page" style="display: none;">
+      <!-- Hero Card Heo Đất -->
+      <section class="savings-hero-card">
+        <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; color: #fbcfe8; font-weight: 700;">
+          Tổng tiền đang tiết kiệm
+        </div>
+        <div id="savings-total-display" class="daily-amount" style="color: #fff; margin: 6px 0 10px;">
+          0 <span class="currency">₫</span>
+        </div>
+        <div style="font-size: 12px; color: #fbcfe8; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 8px;">
+          Tổng tài sản (Ví + Heo đất): <strong id="savings-networth-display" style="color: #fff;">0 ₫</strong>
+        </div>
+      </section>
+
+      <!-- Nút tạo thêm hũ mới -->
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 13px; font-weight: 700; color: var(--text-sub); text-transform: uppercase;">
+          Các hũ tiết kiệm của bạn
+        </span>
+        <button type="button" id="btn-open-create-goal" class="btn-action pink" style="padding: 6px 12px; font-size: 12px;">
+          <span>+</span> Tạo Hũ Mới
+        </button>
+      </div>
+
+      <!-- Danh sách các hũ tiết kiệm -->
+      <section id="savings-cards-container" style="display: flex; flex-direction: column; gap: 12px;"></section>
+    </main>
+
+    <!-- ================= TAB 3: THỐNG KÊ (STATS) ================= -->
+    <main id="tab-stats" class="tab-content tab-page" style="display: none;">
+      <section class="hero-budget-card">
+        <div class="hero-title">Thu & Chi trong tháng</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0;">
+          <div>
+            <span style="font-size: 11px; color: var(--text-sub);">Đã nhận (+)</span>
+            <div id="stats-month-income" style="font-size: 18px; font-weight: 800; color: #34d399;">0 ₫</div>
+          </div>
+          <div>
+            <span style="font-size: 11px; color: var(--text-sub);">Đã chi (-)</span>
+            <div id="stats-month-spent" style="font-size: 18px; font-weight: 800; color: #f87171;">0 ₫</div>
+          </div>
+        </div>
+        
+        <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-sub); margin-bottom: 4px;">
+            <span>Chi qua QR: <strong id="stats-qr-spent" style="color: #38bdf8;">0 ₫</strong></span>
+            <span>Chi Tiền mặt: <strong id="stats-cash-spent" style="color: #34d399;">0 ₫</strong></span>
+          </div>
+          <!-- Thanh tỷ lệ QR vs Tiền mặt -->
+          <div style="height: 8px; width: 100%; background: #0f172a; border-radius: 4px; display: flex; overflow: hidden;">
+            <div id="bar-qr" style="height: 100%; width: 50%; background: var(--wallet-qr); transition: width 0.3s;"></div>
+            <div id="bar-cash" style="height: 100%; width: 50%; background: var(--wallet-cash); transition: width 0.3s;"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="history-section">
+        <div class="section-title">
+          <span>Cơ cấu chi tiêu theo món</span>
+        </div>
+        <div id="stats-category-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+      </section>
+    </main>
+
+    <!-- ================= TAB 4: CÀI ĐẶT & GITHUB GIST (SETTINGS) ================= -->
+    <main id="tab-settings" class="tab-content tab-page" style="display: none;">
+      <!-- Đồng bộ GitHub Gist -->
+      <section class="settings-group">
+        <h3>☁️ Lưu Trữ Trên GitHub Gist</h3>
+        <p class="helper-text">
+          Dữ liệu lưu miễn phí, riêng tư trên GitHub cá nhân của bạn. Tự động đồng bộ giữa điện thoại và máy tính mà không cần thuê server!
+        </p>
+
+        <div class="form-field">
+          <label>GitHub Personal Access Token (classic)</label>
+          <input type="password" id="input-github-token" class="input-text" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+          <span class="helper-text">Token cần có quyền tích chọn <strong>gist</strong>.</span>
+        </div>
+
+        <div class="form-field">
+          <label>Gist ID (Để trống nếu muốn tự động tạo mới)</label>
+          <input type="text" id="input-gist-id" class="input-text" placeholder="Ví dụ: 7a8b9c0d...">
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 4px;">
+          <button type="button" id="btn-create-gist" class="btn-action accent" style="flex: 1;">
+            ✨ Tạo Gist Mới
+          </button>
+          <button type="button" id="btn-pull-gist" class="btn-action" style="flex: 1;">
+            🔄 Tải từ Gist
+          </button>
+        </div>
+
+        <div style="background: #0f172a; padding: 10px; border-radius: 8px; font-size: 11px; line-height: 1.5; color: var(--text-sub);">
+          <strong>Cách lấy Token GitHub trong 1 phút:</strong><br>
+          1. Vào <code>GitHub.com</code> &gt; <strong>Settings</strong> &gt; <strong>Developer Settings</strong><br>
+          2. Chọn <strong>Personal access tokens</strong> &gt; <strong>Tokens (classic)</strong> &gt; <strong>Generate new token</strong><br>
+          3. Đặt tên (Note) là <code>QLCT</code>, tích chọn ô <code>[x] gist</code> và bấm Generate!
+        </div>
+      </section>
+
+      <!-- Sao lưu dự phòng cục bộ -->
+      <section class="settings-group">
+        <h3>💾 Sao Lưu Dữ Liệu</h3>
+        <button type="button" id="btn-export-json" class="btn-action">
+          📥 Xuất file JSON tải về máy
+        </button>
+      </section>
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bottom-nav">
+      <button type="button" class="nav-item active" data-tab="home">
+        <span class="nav-icon">🏠</span>
+        <span>Hôm nay</span>
+      </button>
+      <button type="button" class="nav-item" data-tab="savings">
+        <span class="nav-icon">🐷</span>
+        <span>Tiết kiệm</span>
+      </button>
+      <button type="button" class="nav-item" data-tab="stats">
+        <span class="nav-icon">📊</span>
+        <span>Thống kê</span>
+      </button>
+      <button type="button" class="nav-item" data-tab="settings">
+        <span class="nav-icon">⚙️</span>
+        <span>Gist</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- MODAL: TẠO HŨ TIẾT KIỆM MỚI -->
+  <div id="modal-create-goal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <h3 style="font-size: 16px; font-weight: 700;">✨ Tạo Hũ Tiết Kiệm Mới</h3>
+      <div class="form-field">
+        <label>Tên khoản tiết kiệm</label>
+        <input type="text" id="input-goal-name" class="input-text" placeholder="Ví dụ: Mua tai nghe, Đi Đà Lạt, Quỹ dự phòng...">
+      </div>
+      <div class="form-field">
+        <label>Biểu tượng (Emoji)</label>
+        <input type="text" id="input-goal-icon" class="input-text" value="🐷" maxlength="4">
+      </div>
+      <div class="form-field">
+        <label>Số tiền mục tiêu (VNĐ - tùy chọn)</label>
+        <input type="number" id="input-goal-target" class="input-text" placeholder="0 nếu tích lũy tự do" step="50000">
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 6px;">
+        <button type="button" id="btn-cancel-create-goal" class="btn-action" style="flex: 1;">Hủy</button>
+        <button type="button" id="btn-confirm-create-goal" class="btn-action pink" style="flex: 1;">Tạo Hũ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: BỎ HEO / RÚT TIỀN TIẾT KIỆM -->
+  <div id="modal-saving-op" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <h3 id="saving-op-title" style="font-size: 16px; font-weight: 700;">Bỏ Heo</h3>
+      <div class="form-field">
+        <label>Số tiền (VNĐ)</label>
+        <input type="number" id="input-saving-op-amount" class="input-text" placeholder="Ví dụ: 50000, 100000..." step="10000">
+      </div>
+      <div class="form-field">
+        <label>Nguồn ví liên kết</label>
+        <select id="select-saving-op-wallet" class="input-text" style="color: var(--text-main);">
+          <option value="qr">📱 Ví QR / Ngân hàng</option>
+          <option value="cash">💵 Tiền mặt trong ví</option>
+        </select>
+        <span class="helper-text">Nếu bỏ heo: tiền ví sẽ trừ sang heo. Nếu rút: tiền sẽ trả lại về ví này.</span>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 6px;">
+        <button type="button" id="btn-cancel-saving-op" class="btn-action" style="flex: 1;">Hủy</button>
+        <button type="button" id="btn-confirm-saving-op" class="btn-action pink" style="flex: 1;">Xác Nhận</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/gist.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
